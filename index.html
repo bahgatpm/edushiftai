@@ -480,6 +480,12 @@ button[role="tab"][aria-label^="Go to item"]::after {
    of the DOM once hydration is finished (script at the end of <body>).
    To put the section back: delete this rule and the matching script. */
 .framer-oe3q6j { display: none !important; }
+
+/* --- in-page nav --------------------------------------------------------- */
+/* The header is sticky, so a section scrolled to the top of the window would
+   otherwise sit underneath it. */
+#home, #what-we-do, #vision, #how-it-works, #services,
+#simulations, #team, #contact, #request-demo { scroll-margin-top: 96px; }
 </style>
 </head>
 <body>
@@ -734,30 +740,62 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         el.style.display = "block";
       }
 
-      /* The call-to-action buttons were all dead: "Request a Demo" in the nav
-         pointed at "./" (which just reloads the page) and the other five had
-         no href at all, so clicking them did nothing whatsoever. Framer never
-         had destinations set for them. They are given one here. */
+      /* The call-to-action buttons and the nav were all dead ends: "Request a
+         Demo" in the nav pointed at "./" (which just reloads the page) and
+         every other nav item, plus the footer's own list of sections, had no
+         href at all. Framer never had destinations set for them.
+
+         Each section is given an id here and the links are pointed at it.
+         Setting an attribute is safe across React re-renders; adding nodes is
+         not, which is why this runs after hydration like everything else. */
+      var SECTIONS = [
+        ["Hero Section",                       "home"],
+        ["What Is Digital Simulation Section", "what-we-do"],
+        ["Vision And Mission Section",         "vision"],
+        ["Knowlege Into Experience Section",   "how-it-works"],
+        ["Services Section",                   "services"],
+        ["Simulations Section",                "simulations"],
+        ["Team Section",                       "team"],
+        ["Contact Section",                    "contact"]
+      ];
+      // link label -> section id. Matched on the exact visible text.
+      var LINKS = {
+        "home": "home",
+        "about": "vision",
+        "what we do": "what-we-do",
+        "how it works": "how-it-works",
+        "services": "services",
+        "simulations": "simulations",
+        "team": "team",
+        "our team": "team",
+        "contact": "contact"
+      };
+
       function wireCtas() {
         var f = form();
         if (f && !f.id) f.id = "request-demo";
-        var how = document.querySelector('[data-framer-name="Knowlege Into Experience Section"]');
-        if (how && !how.id) how.id = "how-it-works";
+        for (var s = 0; s < SECTIONS.length; s++) {
+          var el = document.querySelector('[data-framer-name="' + SECTIONS[s][0] + '"]');
+          if (el && !el.id) el.id = SECTIONS[s][1];
+        }
 
         var all = document.querySelectorAll("#main a, #main button, #main [role=button]");
         for (var i = 0; i < all.length; i++) {
-          var el = all[i], t = (el.textContent || "").trim();
-          if (el.getAttribute("aria-hidden") === "true") continue;
+          var el2 = all[i], t = (el2.textContent || "").trim();
+          if (el2.getAttribute("aria-hidden") === "true") continue;
+          var want = null;
           if (/^request a demo$/i.test(t)) {
-            if (el.getAttribute("href") !== "#request-demo") el.setAttribute("href", "#request-demo");
+            want = "#request-demo";
           } else if (/^get started$/i.test(t)) {
-            // same destination the main site sends this button to
-            if (el.getAttribute("href") !== "https://platform.edushiftai.com/") {
-              el.setAttribute("href", "https://platform.edushiftai.com/");
-            }
+            // the same destination the main site sends this button to
+            want = "https://platform.edushiftai.com/";
           } else if (/^see how/i.test(t)) {
-            if (how && el.getAttribute("href") !== "#how-it-works") el.setAttribute("href", "#how-it-works");
+            want = "#how-it-works";
+          } else {
+            var key = LINKS[t.toLowerCase()];
+            if (key && document.getElementById(key)) want = "#" + key;
           }
+          if (want && el2.getAttribute("href") !== want) el2.setAttribute("href", want);
         }
       }
 
@@ -773,21 +811,59 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         }
       }
 
+      /* Tapping a link in the mobile drawer used to leave the drawer open on
+         top of the section it had just scrolled to. Framer opens and closes it
+         from pointer events rather than click, so a plain click on the burger
+         does nothing - the whole sequence has to be replayed. */
+      function tap(el) {
+        var r = el.getBoundingClientRect();
+        // isPrimary matters: Framer's tap gesture ignores a pointer event
+        // without it, and PointerEvent defaults it to false.
+        var o = {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          isPrimary: true, pointerId: 1, pointerType: "touch",
+          button: 0, buttons: 1,
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+        };
+        var up = Object.assign({}, o, { buttons: 0 });
+        try {
+          el.dispatchEvent(new PointerEvent("pointerdown", o));
+          el.dispatchEvent(new PointerEvent("pointerup", up));
+        } catch (e) {
+          el.dispatchEvent(new MouseEvent("mousedown", o));
+          el.dispatchEvent(new MouseEvent("mouseup", up));
+        }
+        el.dispatchEvent(new MouseEvent("click", up));
+      }
+
+      /* Framer names the open drawer's variant "Phone Open" and the closed one
+         "Phone", which is the one dependable signal for its state - the links
+         keep their layout either way, so nothing else tells them apart. */
+      function closeMobileMenu() {
+        if (!document.querySelector('[data-framer-name="Phone Open"]')) return false;
+        var burger = document.querySelector('[data-framer-name="Hamburger Button"]');
+        if (!burger || burger.offsetParent === null) return false;
+        tap(burger);
+        return true;
+      }
+
       document.addEventListener("click", function (e) {
         var el = e.target && e.target.closest ? e.target.closest("a, button, [role=button]") : null;
         if (!el) return;
-        var t = (el.textContent || "").trim();
-        if (/^request a demo$/i.test(t)) {
-          e.preventDefault();
-          if (history.replaceState) history.replaceState(null, "", "#request-demo");
-          scrollToForm();
-        } else if (/^see how/i.test(t)) {
-          var how = document.getElementById("how-it-works");
-          if (!how) return;
-          e.preventDefault();
-          if (history.replaceState) history.replaceState(null, "", "#how-it-works");
-          how.scrollIntoView({ behavior: "smooth", block: "start" });
+        var href = el.getAttribute("href") || "";
+        if (href.charAt(0) !== "#" || href === "#") return;
+        var target = href === "#request-demo" ? form() : document.getElementById(href.slice(1));
+        if (!target) return;
+        e.preventDefault();
+        if (history.replaceState) history.replaceState(null, "", href);
+        function go() {
+          if (href === "#request-demo") { scrollToForm(); return; }
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
         }
+        // The drawer has to finish collapsing before the scroll starts. Doing
+        // both at once shifts the layout underneath the smooth scroll and it
+        // lands a few hundred pixels past the section.
+        if (closeMobileMenu()) setTimeout(go, 420); else go();
       }, true);
 
       // someone arriving on /#request-demo should land on the form
