@@ -385,34 +385,41 @@
 }
 
 /* --- Touch targets ------------------------------------------------------ */
-/* The carousel dots are 8x8 and the footer links 23-27px tall, both well
-   under a comfortable finger. These rules grow the hit area with an invisible
-   overlay instead of padding, so nothing moves and nothing looks different. */
-@media (max-width: 809.98px) {
-  button[role="tab"][aria-label^="Go to item"] { position: relative; }
-  button[role="tab"][aria-label^="Go to item"]::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    /* dots sit only 16px apart, so a wider overlay would swallow its
-       neighbour and make the first dot untappable */
-    width: 16px;
-    height: 40px;
-    transform: translate(-50%, -50%);
-  }
-  .framer-WmRQ6.framer-1ceazut,
-  .framer-693sdz a { position: relative; }
-  .framer-WmRQ6.framer-1ceazut::after,
-  .framer-693sdz a::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 36px;
-    transform: translateY(-50%);
-  }
+/* The carousel dots are 8x8 and the footer links 23-27px tall, both under the
+   24px minimum. The hit area is grown with an invisible overlay rather than
+   padding, so nothing moves and nothing looks different.
+   These used to apply only below 810px. They apply at every width now: an
+   8px dot is just as awkward with a mouse, and WCAG 2.5.8 makes no exemption
+   for pointer input. */
+button[role="tab"][aria-label^="Go to item"] {
+  position: relative;
+  /* The dots sat 16px apart - too close for a 24px target without each one
+     swallowing its neighbour, which is what made dot 1 untappable before.
+     4px either side spreads them to a 24px pitch, so the two hit areas meet
+     exactly and never overlap. */
+  margin-left: 4px;
+  margin-right: 4px;
+}
+button[role="tab"][aria-label^="Go to item"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+}
+.framer-WmRQ6.framer-1ceazut,
+.framer-693sdz a { position: relative; }
+.framer-WmRQ6.framer-1ceazut::after,
+.framer-693sdz a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 36px;
+  transform: translateY(-50%);
 }
 
 /* --- "Trusted by" logo strip ------------------------------------------- */
