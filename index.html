@@ -32,6 +32,12 @@
 	     and fire when a POST started during that window comes back 2xx. */
 	  var pending = false, fired = false, timer = null, observer = null;
 
+	  /* Only the demo-request POST counts. Without this the event also fired on
+	     any other successful POST the page made while a submission was in
+	     flight - Framer's own form endpoint did exactly that. */
+	  var LEAD_PATH = '/api/v1/demo-requests';
+	  function isLead(u) { return String(u || '').indexOf(LEAD_PATH) !== -1; }
+
 	  function fire() {
 	    if (!pending || fired) return;
 	    fired = true;
@@ -46,28 +52,15 @@
 	    if (observer) { observer.disconnect(); observer = null; }
 	  }
 
-	  document.addEventListener('submit', function (e) {
-	    var form = e.target;
-	    if (!form || form.tagName !== 'FORM') return;
+	  /* The form posts through the script at the end of <body>, which raises
+	     this event just before it does. A real submit event is deliberately NOT
+	     used: Framer still has a listener on the form and would fire a second
+	     POST to api.framer.com, sending the same enquiry to two places. */
+	  document.addEventListener('es:demo-submit', function () {
 	    pending = true;
 	    fired = false;
 	    clearTimeout(timer);
 	    timer = setTimeout(stopWaiting, 30000);
-
-	    /* Fallback for the case where Framer submits by some path we do not
-	       wrap: treat "the fields are gone" as success. A validation error
-	       leaves the fields on screen, so this does not fire on failure. */
-	    if (window.MutationObserver) {
-	      if (observer) observer.disconnect();
-	      observer = new MutationObserver(function () {
-	        if (!pending) return;
-	        var stillThere = form.isConnected &&
-	          [].slice.call(form.querySelectorAll('input,textarea'))
-	            .some(function (el) { return el.offsetParent !== null; });
-	        if (!stillThere) fire();
-	      });
-	      observer.observe(document.documentElement, { childList: true, subtree: true });
-	    }
 	  }, true);
 
 	  var nativeFetch = window.fetch;
@@ -75,8 +68,9 @@
 	    window.fetch = function () {
 	      var a = arguments;
 	      var m = (a[1] && a[1].method) || (a[0] && a[0].method) || 'GET';
+	      var u = typeof a[0] === 'string' ? a[0] : (a[0] && a[0].url) || '';
 	      var p = nativeFetch.apply(this, a);
-	      if (pending && String(m).toUpperCase() === 'POST' && p && p.then) {
+	      if (pending && String(m).toUpperCase() === 'POST' && isLead(u) && p && p.then) {
 	        p.then(function (res) { if (res && res.ok) fire(); }, function () {});
 	      }
 	      return p;
@@ -87,11 +81,12 @@
 	  var xhrSend = XMLHttpRequest.prototype.send;
 	  XMLHttpRequest.prototype.open = function (method) {
 	    this.__esMethod = method;
+	    this.__esUrl = arguments[1];
 	    return xhrOpen.apply(this, arguments);
 	  };
 	  XMLHttpRequest.prototype.send = function () {
 	    var xhr = this;
-	    if (pending && String(xhr.__esMethod).toUpperCase() === 'POST') {
+	    if (pending && String(xhr.__esMethod).toUpperCase() === 'POST' && isLead(xhr.__esUrl)) {
 	      xhr.addEventListener('load', function () {
 	        if (xhr.status >= 200 && xhr.status < 400) fire();
 	      });
@@ -642,6 +637,220 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
       function late() { setTimeout(boot, 1500); }
       if (document.readyState === "complete") late();
       else window.addEventListener("load", late);
+    })();
+    </script>
+
+    <!-- ==== Request a demo -> platform API ====
+         The Framer form was inert: "Start the conversation" fires no submit
+         event and posts nothing, so every enquiry typed into it was lost.
+         This wires it to the same endpoint the main site uses.
+
+         The API requires seven fields and the form only had five, so Phone and
+         Position are added here by cloning an existing field - a clone inherits
+         the Framer styling exactly, and building the markup after hydration is
+         the only way to add nodes to this page without React discarding them. -->
+    <script>
+    (function () {
+      var ENDPOINT = "https://platform.edushiftai.com/api/v1/demo-requests";
+      // wrapper class -> payload key, in the order the API lists them
+      var FIELDS = [
+        { sel: ".framer-1j5ejfj", key: "firstName", label: "First Name", max: 100 },
+        { sel: ".framer-93keto",  key: "lastName",  label: "Last Name",  max: 100 },
+        { sel: ".framer-5gwurl",  key: "email",     label: "Email",      max: 255 },
+        { sel: "[data-es-field=phone]",    key: "phone",    label: "Phone",    max: 50 },
+        { sel: ".framer-1xf8glp", key: "company",   label: "Company",    max: 150 },
+        { sel: "[data-es-field=position]", key: "position", label: "Position", max: 150 },
+        { sel: ".framer-q9vuch",  key: "interests", label: "Tell us about your needs", max: 500 }
+      ];
+
+      function form() { return document.querySelector("form.framer-19h9zak") || document.querySelector("form"); }
+      function fieldInput(f, sel) {
+        var w = f.querySelector(sel);
+        return w ? w.querySelector("input, textarea") : null;
+      }
+      function setValue(el, v) {
+        // Framer's inputs are React-controlled, so the native setter plus an
+        // input event is what makes React agree the box is now empty.
+        var proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement : HTMLInputElement;
+        var d = Object.getOwnPropertyDescriptor(proto.prototype, "value");
+        if (d && d.set) d.set.call(el, v); else el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      function setLabel(wrapper, text) {
+        // the label is the deepest leaf node carrying the old caption
+        var leaves = wrapper.querySelectorAll("*");
+        for (var i = 0; i < leaves.length; i++) {
+          var n = leaves[i];
+          if (!n.children.length && n.textContent && n.textContent.trim()) {
+            n.textContent = text;
+            return true;
+          }
+        }
+        return false;
+      }
+
+      /* ---------- add the two fields the API needs and the form lacked ----- */
+      function addField(f, afterSel, key, labelText, placeholder, type) {
+        if (f.querySelector('[data-es-field="' + key + '"]')) return;
+        var after = f.querySelector(afterSel);
+        if (!after) return;
+        var node = after.cloneNode(true);
+        node.setAttribute("data-es-field", key);
+        setLabel(node, labelText);
+        var input = node.querySelector("input, textarea");
+        if (!input) return;
+        if (input.tagName === "TEXTAREA") {
+          var swap = document.createElement("input");
+          swap.className = input.className;
+          swap.setAttribute("style", input.getAttribute("style") || "");
+          input.parentNode.replaceChild(swap, input);
+          input = swap;
+        }
+        input.type = type || "text";
+        input.value = "";
+        input.placeholder = placeholder;
+        input.removeAttribute("name");          // no Framer field name to collide with
+        if (key === "phone") { input.setAttribute("inputmode", "tel"); input.autocomplete = "tel"; }
+        if (key === "position") input.autocomplete = "organization-title";
+        after.parentNode.insertBefore(node, after.nextSibling);
+      }
+
+      function status(f) {
+        var el = f.querySelector("[data-es-status]");
+        if (el) return el;
+        el = document.createElement("p");
+        el.setAttribute("data-es-status", "");
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        el.style.cssText = "margin:12px 0 0;font-size:14px;line-height:1.5;font-family:inherit;display:none";
+        var box = f.querySelector(".framer-1anurlv") || f;
+        box.appendChild(el);
+        return el;
+      }
+      function say(f, msg, ok) {
+        var el = status(f);
+        el.textContent = msg;
+        el.style.color = ok ? "#0f7a3d" : "#b4232a";
+        el.style.display = "block";
+      }
+
+      function build() {
+        var f = form();
+        if (!f) return;
+        addField(f, ".framer-5gwurl", "phone", "Phone", "+20 10 1234 5678", "tel");
+        addField(f, ".framer-1xf8glp", "position", "Position", "Head of L&D", "text");
+        // the API makes Company mandatory, so the label must stop saying otherwise
+        var co = f.querySelector(".framer-1xf8glp");
+        if (co && /optional/i.test(co.textContent || "")) setLabel(co, "Company");
+      }
+
+      /* ---------- submit ---------------------------------------------------- */
+      var sending = false;
+
+      function submitBtn(f) {
+        var as = f.querySelectorAll("a, button");
+        for (var i = 0; i < as.length; i++) {
+          if (/start the conversation/i.test(as[i].textContent || "")) return as[i];
+        }
+        return null;
+      }
+
+      async function send(f) {
+        if (sending) return;
+        var data = {}, missing = [];
+        for (var i = 0; i < FIELDS.length; i++) {
+          var spec = FIELDS[i];
+          var el = fieldInput(f, spec.sel);
+          var v = el ? String(el.value || "").trim() : "";
+          if (!v) { missing.push(spec.label); continue; }
+          if (v.length > spec.max) { say(f, spec.label + " must be " + spec.max + " characters or fewer.", false); return; }
+          data[spec.key] = v;
+        }
+        if (missing.length) {
+          say(f, "Please fill in: " + missing.join(", ") + ".", false);
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) {
+          say(f, "That email address does not look right.", false);
+          return;
+        }
+        if ((data.phone.match(/\d/g) || []).length < 8) {
+          say(f, "Please enter a full phone number, including the country code.", false);
+          return;
+        }
+
+        var btn = submitBtn(f), label = btn ? btn.textContent : "";
+        sending = true;
+        if (btn) { btn.style.pointerEvents = "none"; btn.style.opacity = "0.6"; }
+        say(f, "Sending…", true);
+
+        // Let the measurement script know a submission is in flight. It fires
+        // generate_lead only when the POST below comes back ok, never on the
+        // click, and it never carries any of the values typed above.
+        document.dispatchEvent(new CustomEvent("es:demo-submit"));
+
+        try {
+          var res = await window.fetch(ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) {
+            var msg = "Something went wrong (" + res.status + "). Please try again.";
+            try {
+              var body = await res.json();
+              if (body && body.message) {
+                msg = Array.isArray(body.message) ? body.message[0] : body.message;
+              }
+            } catch (e) {}
+            say(f, msg, false);
+            return;
+          }
+          say(f, "Thanks — your request is in. We will be in touch shortly.", true);
+          for (var j = 0; j < FIELDS.length; j++) {
+            var c = fieldInput(f, FIELDS[j].sel);
+            if (c) setValue(c, "");
+          }
+        } catch (err) {
+          // fetch threw: no response reached the browser at all
+          say(f, "We could not reach the server. Please try again, or email info@edushiftai.com.", false);
+        } finally {
+          sending = false;
+          if (btn) { btn.style.pointerEvents = ""; btn.style.opacity = ""; }
+        }
+      }
+
+      // Delegated, so it keeps working across React re-renders. The button is
+      // an <a> with no href and Framer attaches nothing to it, so the click
+      // would otherwise do nothing at all.
+      document.addEventListener("click", function (e) {
+        var t = e.target && e.target.closest ? e.target.closest("a, button") : null;
+        if (!t || !/start the conversation/i.test(t.textContent || "")) return;
+        var f = t.closest("form") || form();
+        if (!f) return;
+        e.preventDefault();
+        send(f);
+      }, true);
+
+      // Enter inside a field should submit too
+      document.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" || e.shiftKey) return;
+        var el = e.target;
+        if (!el || el.tagName !== "INPUT") return;
+        var f = el.closest && el.closest("form.framer-19h9zak");
+        if (!f) return;
+        e.preventDefault();
+        send(f);
+      }, true);
+
+      function boot() {
+        build();
+        if (window.MutationObserver) {
+          new MutationObserver(build).observe(document.body, { childList: true, subtree: true });
+        }
+      }
+      if (document.readyState === "complete") setTimeout(boot, 1500);
+      else window.addEventListener("load", function () { setTimeout(boot, 1500); });
     })();
     </script>
 
