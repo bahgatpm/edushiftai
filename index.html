@@ -758,6 +758,23 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         ["Team Section",                       "team"],
         ["Contact Section",                    "contact"]
       ];
+      // Social accounts, taken from the EduShift site these links were missing on.
+      var SOCIAL = {
+        "linkedin":  "https://www.linkedin.com/showcase/edushiftai/",
+        "facebook":  "https://www.facebook.com/edushiftai/",
+        "instagram": "https://www.instagram.com/edushift.ai/"
+      };
+      /* Both of these pointed at the Success Stories section, which is no
+         longer on the page.
+
+         The footer link is deleted outright. The nav item is only hidden, and
+         that difference matters: React re-renders the mobile drawer every time
+         it opens or closes, and deleting a node inside it leaves React looking
+         for something that is gone - the menu then opens once and will not
+         shut again. The footer never re-renders, so removing from it is safe. */
+      var DROP = ["success stories"];   // gone from the DOM
+      var HIDE = ["customers"];         // present but never painted
+
       // link label -> section id. Matched on the exact visible text.
       var LINKS = {
         "home": "home",
@@ -783,6 +800,44 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         for (var i = 0; i < all.length; i++) {
           var el2 = all[i], t = (el2.textContent || "").trim();
           if (el2.getAttribute("aria-hidden") === "true") continue;
+          var low = t.toLowerCase();
+
+          var drop = DROP.indexOf(low) !== -1, hide = HIDE.indexOf(low) !== -1;
+          if (drop || hide) {
+            // Take the whole chip, not just the link: a nav item has a wrapper
+            // or two around it, and leaving those keeps a gap where it was.
+            var box = el2;
+            for (var d = 0; d < 3 && box.parentElement; d++) {
+              if ((box.parentElement.textContent || "").trim().toLowerCase() !== low) break;
+              box = box.parentElement;
+            }
+            // The nav separates its items with thin "Line" elements, so taking
+            // an item out on its own leaves two dividers side by side.
+            var sib = box.nextElementSibling || box.previousElementSibling;
+            var isLine = sib && /^line$/i.test(sib.getAttribute("data-framer-name") || "");
+            if (drop) {
+              if (isLine && sib.parentNode) sib.parentNode.removeChild(sib);
+              if (box.parentNode) box.parentNode.removeChild(box);
+            } else if (box.style.display !== "none") {
+              box.style.display = "none";
+              box.setAttribute("aria-hidden", "true");
+              if (isLine) {
+                sib.style.display = "none";
+                sib.setAttribute("aria-hidden", "true");
+              }
+            }
+            continue;
+          }
+
+          if (SOCIAL[low]) {
+            if (el2.getAttribute("href") !== SOCIAL[low]) {
+              el2.setAttribute("href", SOCIAL[low]);
+              el2.setAttribute("target", "_blank");
+              el2.setAttribute("rel", "noopener noreferrer");
+            }
+            continue;
+          }
+
           var want = null;
           if (/^request a demo$/i.test(t)) {
             want = "#request-demo";
