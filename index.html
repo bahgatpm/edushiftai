@@ -486,6 +486,95 @@ button[role="tab"][aria-label^="Go to item"]::after {
    otherwise sit underneath it. */
 #home, #what-we-do, #vision, #how-it-works, #services,
 #simulations, #team, #contact, #request-demo { scroll-margin-top: 96px; }
+
+/* --- Contact form -------------------------------------------------------- */
+/* Framer shipped this form with its input text set to #E6F1F3 on a white
+   field: about 1.1:1 against the background, so nobody could read what they
+   were typing. The rest of this block pairs the fields up on wider screens
+   and gives the form the states it was missing. */
+form.framer-19h9zak .framer-form-input,
+form.framer-19h9zak input,
+form.framer-19h9zak textarea {
+  color: #0a0a0a !important;
+  caret-color: #f89422;
+}
+form.framer-19h9zak .framer-form-input::placeholder,
+form.framer-19h9zak input::placeholder,
+form.framer-19h9zak textarea::placeholder {
+  color: #98a4ac !important;   /* 3.1:1 on white - legible, still clearly a hint */
+  opacity: 1;
+}
+
+/* iOS zooms the page in when a focused input is under 16px. */
+@media (max-width: 809.98px) {
+  form.framer-19h9zak .framer-form-input,
+  form.framer-19h9zak input,
+  form.framer-19h9zak textarea { font-size: 16px !important; }
+}
+
+/* A keyboard user had nothing at all to show which field was focused. */
+form.framer-19h9zak .framer-form-text-input:focus-within {
+  outline: 2px solid rgba(4, 112, 133, 0.6);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Every field is required, and nothing on screen said so until the server
+   refused the submission. */
+form.framer-19h9zak .framer-1anurlv > label > :first-child > :first-child::after {
+  content: " *";
+  color: #f89422;
+  font-weight: 600;
+}
+
+/* A field the browser rejected, called out where the problem actually is
+   rather than only in the summary underneath. */
+form.framer-19h9zak [data-es-invalid] .framer-form-text-input {
+  box-shadow: inset 0 0 0 1.5px #d14343;
+  border-radius: 8px;
+}
+
+form.framer-19h9zak textarea { resize: vertical; min-height: 110px; }
+
+/* The result of a submission, as a block rather than a loose line of text. */
+form.framer-19h9zak [data-es-status] {
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+form.framer-19h9zak [data-es-status][data-tone="ok"] {
+  background: #e8f6ee; color: #0f6b38; box-shadow: inset 0 0 0 1px #bfe3cd;
+}
+form.framer-19h9zak [data-es-status][data-tone="err"] {
+  background: #fdecec; color: #a81f26; box-shadow: inset 0 0 0 1px #f4c9c9;
+}
+form.framer-19h9zak [data-es-status][data-tone="busy"] {
+  background: #eef4f6; color: #2d5460; box-shadow: inset 0 0 0 1px #d4e3e8;
+}
+
+/* Seven stacked full-width boxes made a very tall column. From 810px up the
+   related fields pair off, which is also how the main site lays this out. */
+@media (min-width: 810px) {
+  form.framer-19h9zak .framer-1anurlv {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: 16px;
+  }
+  form.framer-19h9zak .framer-1anurlv > * {
+    flex: 1 1 calc(50% - 8px);
+    width: calc(50% - 8px) !important;
+    min-width: 0;
+  }
+  form.framer-19h9zak .framer-q9vuch,
+  form.framer-19h9zak [data-es-status] {
+    flex: 1 1 100%;
+    width: 100% !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -728,16 +817,24 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         el.setAttribute("data-es-status", "");
         el.setAttribute("role", "status");
         el.setAttribute("aria-live", "polite");
-        el.style.cssText = "margin:12px 0 0;font-size:14px;line-height:1.5;font-family:inherit;display:none";
+        el.style.display = "none";   // the rest of its look lives in the stylesheet
         var box = f.querySelector(".framer-1anurlv") || f;
         box.appendChild(el);
         return el;
       }
-      function say(f, msg, ok) {
+      function say(f, msg, tone) {
         var el = status(f);
         el.textContent = msg;
-        el.style.color = ok ? "#0f7a3d" : "#b4232a";
+        el.setAttribute("data-tone", tone || "err");
         el.style.display = "block";
+      }
+      function clearMarks(f) {
+        var m = f.querySelectorAll("[data-es-invalid]");
+        for (var i = 0; i < m.length; i++) m[i].removeAttribute("data-es-invalid");
+      }
+      function mark(f, sel) {
+        var w = f.querySelector(sel);
+        if (w) w.setAttribute("data-es-invalid", "");
       }
 
       /* The call-to-action buttons and the nav were all dead ends: "Request a
@@ -933,6 +1030,15 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         addField(f, ".framer-5gwurl", "phone", "Phone", "+20 10 1234 5678", "tel");
         addField(f, ".framer-1xf8glp", "position", "Position", "Head of L&D", "text");
         // the API makes Company mandatory, so the label must stop saying otherwise
+        var AUTO = [[".framer-1j5ejfj", "given-name"], [".framer-93keto", "family-name"],
+                    [".framer-5gwurl", "email"], [".framer-1xf8glp", "organization"]];
+        for (var a = 0; a < AUTO.length; a++) {
+          var ai = fieldInput(f, AUTO[a][0]);
+          if (ai && ai.getAttribute("autocomplete") !== AUTO[a][1]) {
+            ai.setAttribute("autocomplete", AUTO[a][1]);
+          }
+        }
+
         var co = f.querySelector(".framer-1xf8glp");
         if (co && /optional/i.test(co.textContent || "")) setLabel(co, "Company");
       }
@@ -950,32 +1056,43 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
 
       async function send(f) {
         if (sending) return;
+        clearMarks(f);
         var data = {}, missing = [];
         for (var i = 0; i < FIELDS.length; i++) {
           var spec = FIELDS[i];
           var el = fieldInput(f, spec.sel);
           var v = el ? String(el.value || "").trim() : "";
-          if (!v) { missing.push(spec.label); continue; }
-          if (v.length > spec.max) { say(f, spec.label + " must be " + spec.max + " characters or fewer.", false); return; }
+          if (!v) { missing.push(spec.label); mark(f, spec.sel); continue; }
+          if (v.length > spec.max) {
+            mark(f, spec.sel);
+            say(f, spec.label + " must be " + spec.max + " characters or fewer.", "err");
+            return;
+          }
           data[spec.key] = v;
         }
         if (missing.length) {
-          say(f, "Please fill in: " + missing.join(", ") + ".", false);
+          say(f, missing.length === FIELDS.length
+            ? "Please fill in every field before sending."
+            : missing.length === 1
+              ? "Please fill in " + missing[0] + "."
+              : "Please fill in: " + missing.join(", ") + ".", "err");
           return;
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email)) {
-          say(f, "That email address does not look right.", false);
+          mark(f, ".framer-5gwurl");
+          say(f, "That email address does not look right.", "err");
           return;
         }
         if ((data.phone.match(/\d/g) || []).length < 8) {
-          say(f, "Please enter a full phone number, including the country code.", false);
+          mark(f, "[data-es-field=phone]");
+          say(f, "Please enter a full phone number, including the country code.", "err");
           return;
         }
 
         var btn = submitBtn(f), label = btn ? btn.textContent : "";
         sending = true;
         if (btn) { btn.style.pointerEvents = "none"; btn.style.opacity = "0.6"; }
-        say(f, "Sending…", true);
+        say(f, "Sending…", "busy");
 
         // Let the measurement script know a submission is in flight. It fires
         // generate_lead only when the POST below comes back ok, never on the
@@ -996,17 +1113,17 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
                 msg = Array.isArray(body.message) ? body.message[0] : body.message;
               }
             } catch (e) {}
-            say(f, msg, false);
+            say(f, msg, "err");
             return;
           }
-          say(f, "Thanks — your request is in. We will be in touch shortly.", true);
+          say(f, "Thanks — your request is in. We will be in touch shortly.", "ok");
           for (var j = 0; j < FIELDS.length; j++) {
             var c = fieldInput(f, FIELDS[j].sel);
             if (c) setValue(c, "");
           }
         } catch (err) {
           // fetch threw: no response reached the browser at all
-          say(f, "We could not reach the server. Please try again, or email info@edushiftai.com.", false);
+          say(f, "We could not reach the server. Please try again, or email info@edushiftai.com.", "err");
         } finally {
           sending = false;
           if (btn) { btn.style.pointerEvents = ""; btn.style.opacity = ""; }
@@ -1034,6 +1151,11 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         if (!f) return;
         e.preventDefault();
         send(f);
+      }, true);
+
+      document.addEventListener("input", function (e) {
+        var w = e.target && e.target.closest ? e.target.closest("[data-es-invalid]") : null;
+        if (w) w.removeAttribute("data-es-invalid");
       }, true);
 
       function boot() {
