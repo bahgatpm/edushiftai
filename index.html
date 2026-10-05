@@ -481,6 +481,66 @@ button[role="tab"][aria-label^="Go to item"]::after {
    To put the section back: delete this rule and the matching script. */
 .framer-oe3q6j { display: none !important; }
 
+/* --- Vision / Mission cards: entrance fallback ---------------------------- */
+/* Framer fades these cards in from opacity 0 when they scroll into view, and
+   with copy shorter than the lorem they shipped with, the mission card's
+   trigger stops firing at desktop widths - it just stays invisible. The script
+   at the end of <body> tags any card it has had to bring in itself.
+
+   This has to be !important, and it has to be here rather than an inline style
+   on the node. React owns the inline style on these cards and writes
+   opacity:0 back on its next render, which is exactly what happened when the
+   script set the style directly. An !important rule in the stylesheet is the
+   one thing that outranks an inline style React did not mark important. */
+[data-es-revealed] { opacity: 1 !important; transform: none !important; }
+
+/* --- nav: "Customers" ---------------------------------------------------- */
+/* It pointed at the Success Stories section, which is no longer on the page.
+   It used to be taken out by the script at the end of <body>, which runs 1.5s
+   after load - so the item was painted on every single page load and then
+   vanished. Hiding it here means it is never painted at all.
+
+   The node itself has to STAY in the DOM. React re-renders the mobile drawer
+   every time it opens, and deleting a node inside it leaves React looking for
+   something that is gone: the drawer then opens once and will not shut again
+   (re-checked - with the node removed, the second tap does nothing).
+   display:none still takes it out of the layout, the tab order and the
+   accessibility tree, so it is gone for every way of using the page.
+
+   Two classes because the breakpoints render it as two separate copies, plus
+   the divider beside it - dropping the item on its own would leave two of the
+   thin "Line" rules side by side. Back to five items and four dividers. */
+.framer-6k57dp-container,
+.framer-18apay7-container,
+.framer-1a10ms4,
+.framer-1r8hlxn { display: none !important; }
+
+/* --- nav: current section ------------------------------------------------ */
+/* This is a one-page site and the nav gave no clue where you were on it. The
+   script at the end of <body> tags the item for the section in view; this is
+   what the tag looks like.
+
+   An underline rather than a colour swap. The nav text is near black, and the
+   brand orange on white is about 2.3:1 - fine for the big solid button, a
+   contrast downgrade for 15px text. A weight change was the other option, but
+   bold is wider than regular, so every item after it would shift along the row
+   as you scrolled. The underline costs no layout at all, and aria-current
+   carries the same fact to a screen reader. */
+/* Longhands, not the "text-decoration" shorthand: an !important shorthand
+   makes every longhand it covers important too, including
+   text-decoration-color: currentColor, which then beats the accent below and
+   the underline comes out the same near-black as the text. */
+#main a[data-es-current] p.framer-text {
+  text-decoration-line: underline !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 6px;
+  text-decoration-color: var(--token-4e2ae18d-f1a4-4613-a74b-31f5f3cf584e, rgb(248, 148, 34)) !important;
+}
+@media (prefers-contrast: more) {
+  /* the accent is the weakest part of this; let it fall back to the text ink */
+  #main a[data-es-current] p.framer-text { text-decoration-color: currentColor !important; }
+}
+
 /* --- in-page nav --------------------------------------------------------- */
 /* The header is sticky, so a section scrolled to the top of the window would
    otherwise sit underneath it. */
@@ -501,7 +561,9 @@ form.framer-19h9zak textarea {
 form.framer-19h9zak .framer-form-input::placeholder,
 form.framer-19h9zak input::placeholder,
 form.framer-19h9zak textarea::placeholder {
-  color: #98a4ac !important;   /* 3.1:1 on white - legible, still clearly a hint */
+  /* Framer's own #737373 is 4.7:1 on white. An earlier pass here replaced it
+     with a lighter grey, which was a step backwards; this keeps Framer's. */
+  color: #737373 !important;
   opacity: 1;
 }
 
@@ -512,10 +574,40 @@ form.framer-19h9zak textarea::placeholder {
   form.framer-19h9zak textarea { font-size: 16px !important; }
 }
 
-/* A keyboard user had nothing at all to show which field was focused. */
+/* --- Field borders -------------------------------------------------------
+   Framer paints the border as a ::after overlay on the input wrapper, sized
+   from --framer-input-border-* custom properties, so the states below set
+   those properties rather than drawing a second line on top of its one.
+
+   The resting colour was #8DBDC8: 2.05:1 against the white field, under the
+   3:1 that WCAG 1.4.11 asks of a control's boundary, and faint enough that
+   the fields read as a list of labels rather than as boxes you can type in. */
+form.framer-19h9zak .framer-form-input-wrapper {
+  --framer-input-border-color: #6e9ba8;
+}
+/* Framer lists the properties to transition but never sets a duration, so
+   nothing actually animates. */
+form.framer-19h9zak .framer-form-input-wrapper::after {
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}
+
+/* The state colours are written straight onto the overlay rather than through
+   the custom properties. Going through the properties left the width at 1px
+   and the colour resolving to the browser's own focus blue - the overlay reads
+   them once and does not pick up a later override cleanly. */
+form.framer-19h9zak .framer-form-text-input:hover::after {
+  border-color: #4b8798;
+}
+
+/* Focus: brand teal, thicker, with a soft ring so it reads at a glance and
+   not only to someone looking for it. */
+form.framer-19h9zak .framer-form-text-input:focus-within::after {
+  border-color: #047185;
+  border-width: 2px;
+}
 form.framer-19h9zak .framer-form-text-input:focus-within {
-  outline: 2px solid rgba(4, 112, 133, 0.6);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(4, 113, 133, 0.16);
   border-radius: 8px;
 }
 
@@ -527,11 +619,27 @@ form.framer-19h9zak .framer-1anurlv > label > :first-child > :first-child::after
   font-weight: 600;
 }
 
-/* A field the browser rejected, called out where the problem actually is
-   rather than only in the summary underneath. */
-form.framer-19h9zak [data-es-invalid] .framer-form-text-input {
-  box-shadow: inset 0 0 0 1.5px #d14343;
-  border-radius: 8px;
+/* A field at fault, called out where the problem is rather than only in the
+   summary underneath. This recolours the same border; an inset shadow on top
+   of it drew a second line just inside the first. */
+form.framer-19h9zak [data-es-invalid] .framer-form-text-input::after {
+  border-color: #d14343;
+  border-width: 1.5px;
+}
+form.framer-19h9zak [data-es-invalid] .framer-form-text-input:hover::after,
+form.framer-19h9zak [data-es-invalid] .framer-form-text-input:focus-within::after {
+  border-color: #b3271f;
+  border-width: 2px;
+}
+form.framer-19h9zak [data-es-invalid] .framer-form-text-input:focus-within {
+  box-shadow: 0 0 0 3px rgba(209, 67, 67, 0.18);
+}
+
+/* Windows high contrast throws away colour, so the border has to be redrawn
+   from the system palette or the fields lose their edges entirely. */
+@media (forced-colors: active) {
+  form.framer-19h9zak .framer-form-input-wrapper::after { border-color: CanvasText; }
+  form.framer-19h9zak .framer-form-text-input:focus-within::after { border-color: Highlight; }
 }
 
 form.framer-19h9zak textarea { resize: vertical; min-height: 110px; }
@@ -998,6 +1106,9 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
          for something that is gone - the menu then opens once and will not
          shut again. The footer never re-renders, so removing from it is safe. */
       var DROP = ["success stories"];   // gone from the DOM
+      // "customers" is hidden in the stylesheet instead, so that it is never
+      // painted rather than disappearing a second and a half in. This stays as
+      // a backstop in case a re-export changes the class names that rule uses.
       var HIDE = ["customers"];         // present but never painted
 
       // link label -> section id. Matched on the exact visible text.
@@ -1510,9 +1621,19 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
           var onScreen = r.top < (window.innerHeight || 0) && r.bottom > 0 && r.height > 0;
           if (!onScreen) continue;
           if (parseFloat(getComputedStyle(card).opacity) >= 0.05) continue;
-          // give Framer's own trigger a moment before stepping in
-          if (!seen[name]) { seen[name] = Date.now(); continue; }
-          if (Date.now() - seen[name] > 700) reveal(card);
+          // Give Framer's own trigger a moment before stepping in. The wait is a
+          // one-shot timer rather than a second look on the next scroll: scroll
+          // past quickly and the card is gone from the screen before the grace
+          // is up, and it would stay blank until it was scrolled back to.
+          if (seen[name]) continue;
+          seen[name] = true;
+          (function (n) {
+            setTimeout(function () {
+              var c = box(n);
+              if (!c || c.getAttribute('data-es-revealed')) return;
+              if (parseFloat(getComputedStyle(c).opacity) < 0.05) reveal(c);
+            }, 700);
+          })(name);
         }
       }
 
@@ -1537,6 +1658,71 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         new MutationObserver(schedule).observe(document.body,
           { childList: true, subtree: true, characterData: true });
       }
+    })();
+    </script>
+
+    <script>
+    /* --- nav: mark the section you are looking at ---------------------------
+       Only the sections that actually have a nav item are considered, so
+       scrolling through Simulations or Contact leaves the last item you passed
+       marked rather than flicking the underline off and on. Nothing is marked
+       while you are still on the hero, because no nav item points there.
+
+       Attributes only: adding nodes inside Framer's nav breaks React's
+       re-render, setting an attribute on a node it owns does not. The links are
+       looked up fresh each pass for the same reason - React swaps them out on
+       hydration and every time the mobile drawer opens. */
+    (function () {
+      /* es-nav-current */
+      // in document order; ids are the ones wireCtas() puts on the sections
+      var LINKED = ['what-we-do', 'vision', 'how-it-works', 'services', 'team'];
+      var OFFSET = 120;   // clears the sticky header, as scroll-margin-top does
+
+      function current() {
+        var id = null;
+        for (var i = 0; i < LINKED.length; i++) {
+          var el = document.getElementById(LINKED[i]);
+          if (el && el.getBoundingClientRect().top <= OFFSET) id = LINKED[i];
+        }
+        return id;
+      }
+
+      function mark() {
+        var id = current();
+        // Navbar only. Every nav item, desktop row and mobile drawer alike,
+        // sits under a "Menu"; the footer's list is under "Quick Links" and the
+        // body's "See How It Works" buttons under their own section, and none of
+        // those should pick up an underline meant for the nav.
+        var links = document.querySelectorAll('[data-framer-name="Menu"] a[href^="#"]');
+        for (var i = 0; i < links.length; i++) {
+          var a = links[i];
+          var on = !!id && a.getAttribute('href') === '#' + id;
+          var had = a.hasAttribute('data-es-current');
+          // only write on a real change: an unconditional write is a mutation,
+          // and there are MutationObservers on this page that would see it
+          if (on && !had) {
+            a.setAttribute('data-es-current', '');
+            a.setAttribute('aria-current', 'true');
+          } else if (!on && had) {
+            a.removeAttribute('data-es-current');
+            a.removeAttribute('aria-current');
+          }
+        }
+      }
+
+      var ticking = false;
+      function onScroll() {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(function () { ticking = false; mark(); });
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      window.addEventListener('hashchange', mark);
+      // the section ids are not set until wireCtas() has run, so keep looking
+      setInterval(mark, 500);
+      mark();
     })();
     </script>
 
