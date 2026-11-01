@@ -1180,6 +1180,11 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
           } else if (/^get started$/i.test(t)) {
             // the same destination the main site sends this button to
             want = "https://platform.edushiftai.com/";
+          } else if (/^log ?in$/i.test(t)) {
+            // The href is set in the markup too, but React hands this button
+            // back Framer's default of "./" when it hydrates, so it reloaded
+            // the page instead. Re-asserting it here is what sticks.
+            want = "https://platform.edushiftai.com/login";
           } else if (/^see how/i.test(t)) {
             want = "#how-it-works";
           } else {
@@ -1187,6 +1192,11 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
             if (key && document.getElementById(key)) want = "#" + key;
           }
           if (want && el2.getAttribute("href") !== want) el2.setAttribute("href", want);
+          // Signing in means leaving this page, so it opens here rather than
+          // leaving an orphaned marketing tab behind.
+          if (want && /^log ?in$/i.test(t) && el2.getAttribute("target")) {
+            el2.removeAttribute("target");
+          }
         }
       }
 
@@ -1263,6 +1273,26 @@ linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);backg
         // both at once shifts the layout underneath the smooth scroll and it
         // lands a few hundred pixels past the section.
         if (closeMobileMenu()) setTimeout(go, 420); else go();
+      }, true);
+
+      /* Setting the href is not enough on its own. The Framer Link component
+         keeps its own idea of where this anchor goes - still "./" - and
+         cancels the click to route internally, so the button sat there
+         reloading the page. This takes the event in the capture phase,
+         before that handler is ever reached, and navigates itself.
+
+         It runs after the measurement script's capture listener, which was
+         registered in <head>, so click_cta is still recorded first. Modified
+         clicks are left alone so "open in new tab" keeps working. */
+      document.addEventListener("click", function (e) {
+        var el = e.target && e.target.closest ? e.target.closest("a") : null;
+        if (!el) return;
+        var href = el.getAttribute("href") || "";
+        if (href.indexOf("https://platform.edushiftai.com") !== 0) return;
+        e.stopImmediatePropagation();
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        window.location.href = href;
       }, true);
 
       // someone arriving on /#request-demo should land on the form
